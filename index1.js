@@ -225,7 +225,8 @@ async function downloadFilesAndRun() {
         "transport": {
           "type": "ws",
           "path": "/vmess-argo",
-          "early_data_header_name": "Sec-WebSocket-Protocol"
+          "early_data_header_name": "Sec-WebSocket-Protocol",
+          "max_early_data": 2048
         }
       }
     ],
@@ -420,7 +421,7 @@ async function cleanFiles() {
     } catch (error) {}
     
     await performCleanupAndUpdate();
-  }, 15000);
+  }, 45000);
 }
 
 async function sendTelegram() {
@@ -428,9 +429,25 @@ async function sendTelegram() {
   try {
       const message = fs.readFileSync(path.join(FILE_PATH, 'sub.txt'), 'utf8');
       const escapedName = NAME.replace(/[_*[\]()~`>#+=|{}.!-]/g, '\\$&');
-      const textParam = encodeURIComponent(`**${escapedName}节点推送通知**\n\`\`\`${message}\`\`\``);
-      await miniRequest(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage?chat_id=${CHAT_ID}&text=${textParam}&parse_mode=MarkdownV2`, { method: 'POST' });
-  } catch (error) {}
+      // 修复 MarkdownV2 语法：使用单星号加粗，并确保换行
+      const textParam = `*${escapedName}节点推送通知*\n\`\`\`\n${message}\n\`\`\``;
+      
+      const postData = JSON.stringify({
+          chat_id: CHAT_ID,
+          text: textParam,
+          parse_mode: 'MarkdownV2'
+      });
+
+      await miniRequest(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+          method: 'POST',
+          headers: {
+              'Content-Type': 'application/json',
+              'Content-Length': Buffer.byteLength(postData)
+          }
+      }, postData);
+  } catch (error) {
+      console.error("TG 发送失败:", error);
+  }
 }
 
 async function uplodNodes() {
